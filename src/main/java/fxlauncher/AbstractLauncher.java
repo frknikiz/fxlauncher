@@ -2,11 +2,7 @@ package fxlauncher;
 
 import javafx.application.Application;
 
-import javax.net.ssl.HostnameVerifier;
-import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
+import javax.net.ssl.*;
 import javax.xml.bind.JAXB;
 import java.io.File;
 import java.io.IOException;
@@ -32,255 +28,270 @@ import java.util.logging.Logger;
 import java.util.logging.SimpleFormatter;
 import java.util.stream.Collectors;
 
+import static fxlauncher.Strings.ensureEndingSlash;
+
 @SuppressWarnings("unchecked")
-public abstract class AbstractLauncher<APP>  {
-    private static final Logger log = Logger.getLogger("AbstractLauncher");
+public abstract class AbstractLauncher<APP> {
+	private static final Logger log = Logger.getLogger("AbstractLauncher");
 
-    protected static FXManifest manifest;
-    private String phase;
+	protected static FXManifest manifest;
+	private String phase;
 
-    /**
-     * Make java.util.logger log to a file. Default it will log to $TMPDIR/fxlauncher.log. This can be overriden by using
-     * comman line parameter <code>--logfile=logfile</code>
-     *
-     * @throws IOException
-     */
-    protected void setupLogFile() throws IOException {
-        String filename = System.getProperty("java.io.tmpdir") + File.separator + "fxlauncher.log";
-        if (getParameters().getNamed().containsKey("logfile"))
-            filename = getParameters().getNamed().get("logfile");
-        System.out.println("logging to " + filename);
-        FileHandler handler = new FileHandler(filename);
-        handler.setFormatter(new SimpleFormatter());
-        log.addHandler(handler);
-    }
+	/**
+	 * Make java.util.logger log to a file. Default it will log to
+	 * $TMPDIR/fxlauncher.log. This can be overriden by using comman line parameter
+	 * <code>--logfile=logfile</code>
+	 *
+	 * @throws IOException
+	 */
+	protected void setupLogFile() throws IOException {
+		String filename = System.getProperty("java.io.tmpdir") + File.separator + "fxlauncher.log";
+		if (getParameters().getNamed().containsKey("logfile"))
+			filename = getParameters().getNamed().get("logfile");
+		System.out.println("logging to " + filename);
+		FileHandler handler = new FileHandler(filename);
+		handler.setFormatter(new SimpleFormatter());
+		log.addHandler(handler);
+	}
 
-    /**
-     * Check if the SSL connection needs to ignore the validity of the ssl certificate.
-     *
-     * @throws KeyManagementException
-     * @throws NoSuchAlgorithmException
-     */
-    protected void checkSSLIgnoreflag() throws KeyManagementException, NoSuchAlgorithmException {
-        if (getParameters().getUnnamed().contains("--ignoressl")) {
-            setupIgnoreSSLCertificate();
-        }
-    }
+	/**
+	 * Check if the SSL connection needs to ignore the validity of the ssl
+	 * certificate.
+	 *
+	 * @throws KeyManagementException
+	 * @throws NoSuchAlgorithmException
+	 */
+	protected void checkSSLIgnoreflag() throws KeyManagementException, NoSuchAlgorithmException {
+		if (getParameters().getUnnamed().contains("--ignoressl")) {
+			setupIgnoreSSLCertificate();
+		}
+	}
 
-    protected ClassLoader createClassLoader(Path cacheDir) {
-        List<URL> libs = manifest.files.stream().filter(LibraryFile::loadForCurrentPlatform).map(it -> it.toURL(cacheDir)).collect(Collectors.toList());
+	protected ClassLoader createClassLoader(Path cacheDir) {
+		List<URL> libs = manifest.files.stream().filter(LibraryFile::loadForCurrentPlatform)
+				.map(it -> it.toURL(cacheDir)).collect(Collectors.toList());
 
-        ClassLoader systemClassLoader = ClassLoader.getSystemClassLoader();
-        if (systemClassLoader instanceof FxlauncherClassCloader)
-        {
-            ((FxlauncherClassCloader) systemClassLoader).addUrls(libs);
-            return systemClassLoader;
-        }
-        else
-        {
-            ClassLoader classLoader = new URLClassLoader(libs.toArray(new URL[libs.size()]));
-            Thread.currentThread().setContextClassLoader(classLoader);
+		ClassLoader systemClassLoader = ClassLoader.getSystemClassLoader();
+		if (systemClassLoader instanceof FxlauncherClassCloader) {
+			((FxlauncherClassCloader) systemClassLoader).addUrls(libs);
+			return systemClassLoader;
+		} else {
+			ClassLoader classLoader = new URLClassLoader(libs.toArray(new URL[libs.size()]));
+			Thread.currentThread().setContextClassLoader(classLoader);
 
-            setupClassLoader(classLoader);
+			setupClassLoader(classLoader);
 
-            return classLoader;
-        }
-    }
+			return classLoader;
+		}
+	}
 
-    protected void updateManifest() throws Exception {
-        phase = "Update Manifest";
-        syncManifest();
-    }
+	protected void updateManifest() throws Exception {
+		phase = Constants.getString("Application.Phase.Update");
+		syncManifest();
+	}
 
-    /**
-     * Check if remote files are newer then local files. Return true if files are updated, triggering the whatsnew option else false.
-     * Also return false and do not check for updates if the <code>--offline</code> commandline argument is set.
-     *
-     * @return true if new files have been downloaded, false otherwise.
-     * @throws Exception
-     */
-    protected boolean syncFiles() throws Exception {
+	/**
+	 * Check if remote files are newer then local files. Return true if files are
+	 * updated, triggering the whatsnew option else false. Also return false and do
+	 * not check for updates if the <code>--offline</code> commandline argument is
+	 * set.
+	 *
+	 * @return true if new files have been downloaded, false otherwise.
+	 * @throws Exception
+	 */
+	protected boolean syncFiles() throws Exception {
 
-        Path cacheDir = manifest.resolveCacheDir(getParameters().getNamed());
-        log.info(String.format("Using cache dir %s", cacheDir));
+		Path cacheDir = manifest.resolveCacheDir(getParameters().getNamed());
+		log.info(() -> String.format(Constants.getString("Application.log.Sycnfiles"), cacheDir));
 
-        phase = "File Synchronization";
+		phase = Constants.getString("Application.Phase.Syncfile");
 
-        if (getParameters().getUnnamed().contains("--offline")) {
-            log.info("not updating files from remote, offline selected");
-            return false; // to signal that nothing has changed.
-        }
-        List<LibraryFile> needsUpdate = manifest.files.stream()
-                .filter(LibraryFile::loadForCurrentPlatform)
-                .filter(it -> it.needsUpdate(cacheDir))
-                .collect(Collectors.toList());
+		if (getParameters().getUnnamed().contains("--offline")) {
+			log.info(Constants.getString("Application.log.offline"));
+			return false; // to signal that nothing has changed.
+		}
+		List<LibraryFile> needsUpdate = manifest.files.stream().filter(LibraryFile::loadForCurrentPlatform)
+				.filter(it -> it.needsUpdate(cacheDir)).collect(Collectors.toList());
 
-        if (needsUpdate.isEmpty())
-            return false;
+		if (needsUpdate.isEmpty())
+			return false;
 
-        Long totalBytes = needsUpdate.stream().mapToLong(f -> f.size).sum();
-        Long totalWritten = 0L;
+		Long totalBytes = needsUpdate.stream().mapToLong(f -> f.size).sum();
+		Long totalWritten = 0L;
 
-        for (LibraryFile lib : needsUpdate) {
-            Path target = cacheDir.resolve(lib.file).toAbsolutePath();
-            Files.createDirectories(target.getParent());
+		for (LibraryFile lib : needsUpdate) {
+			Path target = cacheDir.resolve(lib.file).toAbsolutePath();
+			Files.createDirectories(target.getParent());
 
-            URI uri = manifest.uri.resolve(lib.file);
+			URI uri;
 
-            try (InputStream input = openDownloadStream(uri); OutputStream output = Files.newOutputStream(target)) {
+			// We avoid using uri.resolve() here so as to not break UNC paths. See issue
+			// #143
+			String separator = manifest.uri.getPath().endsWith("/") ? "" : "/";
+			uri = URI.create(manifest.uri.toString() + separator + lib.file);
 
-                byte[] buf = new byte[65536];
+			try (InputStream input = openDownloadStream(uri); OutputStream output = Files.newOutputStream(target)) {
 
-                int read;
-                while ((read = input.read(buf)) > -1) {
-                    output.write(buf, 0, read);
-                    totalWritten += read;
-                    Double progress = totalWritten.doubleValue() / totalBytes.doubleValue();
-                    updateProgress(progress);
-                }
-            }
-        }
-        return true;
-    }
+				byte[] buf = new byte[65536];
 
-    private InputStream openDownloadStream(URI uri) throws IOException {
-        if (uri.getScheme().equals("file")) return Files.newInputStream(new File(uri.getPath()).toPath());
+				int read;
+				while ((read = input.read(buf)) > -1) {
+					output.write(buf, 0, read);
+					totalWritten += read;
+					Double progress = totalWritten.doubleValue() / totalBytes.doubleValue();
+					updateProgress(progress);
+				}
+			}
+		}
+		return true;
+	}
 
-        URLConnection connection = uri.toURL().openConnection();
-        if (uri.getUserInfo() != null) {
-            byte[] payload = uri.getUserInfo().getBytes(StandardCharsets.UTF_8);
-            String encoded = Base64.getEncoder().encodeToString(payload);
-            connection.setRequestProperty("Authorization", String.format("Basic %s", encoded));
-        }
-        return connection.getInputStream();
-    }
+	private InputStream openDownloadStream(URI uri) throws IOException {
+		if (uri.getScheme().equals("file"))
+			return Files.newInputStream(new File(uri.getPath()).toPath());
 
-    protected void createApplicationEnvironment() throws Exception {
-        phase = "Create Application";
+		URLConnection connection = uri.toURL().openConnection();
+		if (uri.getUserInfo() != null) {
+			byte[] payload = uri.getUserInfo().getBytes(StandardCharsets.UTF_8);
+			String encoded = Base64.getEncoder().encodeToString(payload);
+			connection.setRequestProperty("Authorization", String.format("Basic %s", encoded));
+		}
+		return connection.getInputStream();
+	}
 
-        if (manifest == null)
-            throw new IllegalArgumentException("Unable to retrieve embedded or remote manifest.");
-        List<String> preloadLibs = manifest.getPreloadNativeLibraryList();
-        for (String preloadLib : preloadLibs)
-            System.loadLibrary(preloadLib);
+	protected void createApplicationEnvironment() throws Exception {
+		phase = Constants.getString("Application.Phase.Create"); 
 
-        Path cacheDir = manifest.resolveCacheDir(getParameters() != null ? getParameters().getNamed() : null);
+		if (manifest == null)
+			throw new IllegalArgumentException(Constants.getString("Error.Application.Manifest.Retrieve"));
+		List<String> preloadLibs = manifest.getPreloadNativeLibraryList();
+		for (String preloadLib : preloadLibs)
+			System.loadLibrary(preloadLib);
 
-        ClassLoader classLoader = createClassLoader(cacheDir);
-        log.info(String.format("Loading appClass %s", manifest.launchClass));
-        Class<APP> appclass = (Class<APP>) classLoader.loadClass(manifest.launchClass);
+		Path cacheDir = manifest.resolveCacheDir(getParameters() != null ? getParameters().getNamed() : null);
 
-        createApplication(appclass);
-    }
+		ClassLoader classLoader = createClassLoader(cacheDir);
+		log.info(String.format("Loading appClass %s", manifest.launchClass));
+		Class<APP> appclass = (Class<APP>) classLoader.loadClass(manifest.launchClass);
 
-    protected void syncManifest() throws Exception {
-        Map<String, String> namedParams = getParameters().getNamed();
+		createApplication(appclass);
+	}
 
-        String appStr = null;
+	protected void syncManifest() throws Exception {
+		Map<String, String> namedParams = getParameters().getNamed();
 
-        if (namedParams.containsKey("app")) {
-            // get --app-param
-            appStr = namedParams.get("app");
-            log.info(String.format("Loading manifest from 'app' parameter supplied: %s", appStr));
-        }
+		String appStr = null;
 
-        if (namedParams.containsKey("uri")) {
-            // get --uri-param
-            String uriStr = namedParams.get("uri");
-            if (!uriStr.endsWith("/")) {
-                uriStr = uriStr + "/";
-            }
-            log.info(String.format("Syncing files from 'uri' parameter supplied:  %s", uriStr));
+		if (namedParams.containsKey("app")) {
+			// get --app-param
+			// appStr = ensureEndingSlash(namedParams.get("app"));
+			// no need to add slass to end
+			appStr = namedParams.get("app");
+			log.info(String.format("Loading manifest from 'app' parameter supplied: %s", appStr));
+		}
 
-            URI uri = URI.create(uriStr);
-            // load manifest from --app param if supplied, else default file at supplied uri
-            URI app = appStr != null ? URI.create(appStr) : uri.resolve("app.xml");
-            manifest = FXManifest.load(app);
-            // set supplied uri in manifest
-            manifest.uri = uri;
-            return;
-        }
+		if (namedParams.containsKey("uri")) {
+			// get --uri-param
+			String uriStr = ensureEndingSlash(namedParams.get("uri"));
+			log.info(()->String.format("Syncing files from 'uri' parameter supplied:  %s", uriStr));
 
-        if (appStr != null) {
-            // --uri was not supplied, but --app was, so load manifest from that
-            manifest = FXManifest.load(new File(appStr).toURI());
-            return;
-        }
+			URI uri = URI.create(uriStr);
 
-        URL embeddedManifest = AbstractLauncher.class.getResource("/app.xml");
-        manifest = JAXB.unmarshal(embeddedManifest, FXManifest.class);
+			// load manifest from --app param if supplied, else default file at supplied uri
+			URI app = (appStr != null) ? URI.create(appStr) : URI.create(uriStr + "app.xml"); // We avoid using
+																								// uri.resolve() here so
+																								// as to not break UNC
+																								// paths. See issue #143
+			manifest = FXManifest.load(app);
+			// set supplied uri in manifest
+			manifest.uri = uri;
+			return;
+		}
 
-        Path cacheDir = manifest.resolveCacheDir(namedParams);
-        Path manifestPath = manifest.getPath(cacheDir);
+		if (appStr != null) {
+			// --uri was not supplied, but --app was, so load manifest from that
+			manifest = FXManifest.load(new File(appStr).toURI());
+			return;
+		}
 
-        if (Files.exists(manifestPath))
-            manifest = JAXB.unmarshal(manifestPath.toFile(), FXManifest.class);
+		URL embeddedManifest = AbstractLauncher.class.getResource("/app.xml");
+		manifest = JAXB.unmarshal(embeddedManifest, FXManifest.class);
 
-        if (getParameters().getUnnamed().contains("--offline")) {
-            log.info("offline selected");
-            return;
-        }
-        try {
-            FXManifest remoteManifest = FXManifest.load(manifest.getFXAppURI());
+		Path cacheDir = manifest.resolveCacheDir(namedParams);
+		Path manifestPath = manifest.getPath(cacheDir);
 
-            if (remoteManifest == null) {
-                log.info(String.format("No remote manifest at %s", manifest.getFXAppURI()));
-            } else if (!remoteManifest.equals(manifest)) {
-                // Update to remote manifest if newer or we specifically accept downgrades
-                if (remoteManifest.isNewerThan(manifest) || manifest.acceptDowngrade) {
-                    manifest = remoteManifest;
-                    JAXB.marshal(manifest, manifestPath.toFile());
-                }
-            }
-        } catch (Exception ex) {
-            log.log(Level.WARNING, String.format("Unable to update manifest from %s", manifest.getFXAppURI()), ex);
-        }
-    }
+		if (Files.exists(manifestPath))
+			manifest = JAXB.unmarshal(manifestPath.toFile(), FXManifest.class);
 
-    protected void setupIgnoreSSLCertificate() throws NoSuchAlgorithmException, KeyManagementException {
-        log.info("starting ssl setup");
-        TrustManager[] trustManager = new TrustManager[]{
-                new X509TrustManager() {
-                    @Override
-                    public void checkClientTrusted(X509Certificate[] x509Certificates, String s) throws CertificateException {
-                    }
+		if (getParameters().getUnnamed().contains("--offline")) {
+			log.info("offline selected");
+			return;
+		}
+		try {
+			FXManifest remoteManifest = FXManifest.load(manifest.getFXAppURI());
 
-                    @Override
-                    public void checkServerTrusted(X509Certificate[] x509Certificates, String s) throws CertificateException {
+			if (remoteManifest == null) {
+				log.info(String.format("No remote manifest at %s", manifest.getFXAppURI()));
+			} else if (!remoteManifest.equals(manifest)) {
+				// Update to remote manifest if newer or we specifically accept downgrades
+				if (remoteManifest.isNewerThan(manifest) || manifest.acceptDowngrade) {
+					manifest = remoteManifest;
+					JAXB.marshal(manifest, manifestPath.toFile());
+				}
+			}
+		} catch (Exception ex) {
+			log.log(Level.WARNING, String.format("Unable to update manifest from %s", manifest.getFXAppURI()), ex);
+		}
+	}
 
-                    }
+	protected void setupIgnoreSSLCertificate() throws NoSuchAlgorithmException, KeyManagementException {
+		log.info("starting ssl setup");
+		TrustManager[] trustManager = new TrustManager[] { new X509TrustManager() {
+			@Override
+			public void checkClientTrusted(X509Certificate[] x509Certificates, String s) throws CertificateException {
+			}
 
-                    @Override
-                    public X509Certificate[] getAcceptedIssuers() {
-                        return null;
-                    }
-                }};
-        SSLContext sslContext = SSLContext.getInstance("SSL");
-        sslContext.init(null, trustManager, new java.security.SecureRandom());
-        HttpsURLConnection.setDefaultSSLSocketFactory(sslContext.getSocketFactory());
+			@Override
+			public void checkServerTrusted(X509Certificate[] x509Certificates, String s) throws CertificateException {
 
-        HostnameVerifier hostnameVerifier = (s, sslSession) -> true;
-        HttpsURLConnection.setDefaultHostnameVerifier(hostnameVerifier);
-    }
+			}
 
-    protected boolean checkIgnoreUpdateErrorSetting() {
-        return getParameters().getUnnamed().contains("--stopOnUpdateErrors");
-    }
-    public String getPhase() {
-        return phase;
-    }
+			@Override
+			public X509Certificate[] getAcceptedIssuers() {
+				return null;
+			}
+		} };
+		SSLContext sslContext = SSLContext.getInstance("SSL");
+		sslContext.init(null, trustManager, new java.security.SecureRandom());
+		HttpsURLConnection.setDefaultSSLSocketFactory(sslContext.getSocketFactory());
 
-    public void setPhase(String phase) {
-        this.phase = phase;
-    }
+		HostnameVerifier hostnameVerifier = (s, sslSession) -> true;
+		HttpsURLConnection.setDefaultHostnameVerifier(hostnameVerifier);
+	}
 
-    public FXManifest getManifest() {
-        return manifest;
-    }
+	protected boolean checkIgnoreUpdateErrorSetting() {
+		return getParameters().getUnnamed().contains("--stopOnUpdateErrors");
+	}
 
-    protected abstract Application.Parameters getParameters();
-    protected abstract void updateProgress(double progress);
-    protected abstract void createApplication(Class<APP> appClass);
-    protected abstract void reportError(String title, Throwable error);
-    protected abstract void setupClassLoader(ClassLoader classLoader);
+	public String getPhase() {
+		return phase;
+	}
+
+	public void setPhase(String phase) {
+		this.phase = phase;
+	}
+
+	public FXManifest getManifest() {
+		return manifest;
+	}
+
+	protected abstract Application.Parameters getParameters();
+
+	protected abstract void updateProgress(double progress);
+
+	protected abstract void createApplication(Class<APP> appClass);
+
+	protected abstract void reportError(String title, Throwable error);
+
+	protected abstract void setupClassLoader(ClassLoader classLoader);
 }

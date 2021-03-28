@@ -1,6 +1,6 @@
 # FXLauncher
 
-[![Maven Central](https://maven-badges.herokuapp.com/maven-central/no.tornado/fxlauncher/badge.svg)](https://search.maven.org/#search|ga|1|no.tornado.fxlauncher)
+[![Maven Central](https://maven-badges.herokuapp.com/maven-central/no.tornado/fxlauncher/badge.svg?cacheBust=true)](https://search.maven.org/#search|ga|1|no.tornado.fxlauncher)
 [![Apache License](https://img.shields.io/badge/license-Apache%20License%202.0-blue.svg)](http://www.apache.org/licenses/LICENSE-2.0)
 
 Auto updating launcher for JavaFX Applications. Combined with JavaFX native packaging, you get
@@ -97,7 +97,13 @@ Notice: `WhatsNew` is not supported.
 
 ### File based deployment
 
-The app uri can be a file:// based url instead of an web uri if your application is hosted on a common network location for your users.
+The app uri can be a `file://` based url instead of a web uri if your application is hosted on a common network location for your users.
+
+#### UNC Paths
+FXLauncher can deal with [UNC paths], if you ask it nicely. Instead of `\\server\share\myapp` use `file:////server/share/myapp`.
+Yes, that's four forward slashes; two for the `file://` protocol and two for the UNC path.
+
+[UNC paths]: https://www.lifewire.com/unc-universal-naming-convention-818230
 
 ### Native installers
 
@@ -116,16 +122,26 @@ Check out these prebuilt installers for a more complex demo application
 
 ## Specify cache directory
 
-By default, the artifacts are downloaded to the current working directory. This is usually fine for native installers, but if you distribute
-your application via just the launcher jar, you might want to specify where the downloaded artifacts land. See the 
-[cache dir documentation](https://github.com/edvin/fxlauncher/wiki/Optional-Cache-Directory) for more information.
+By default, the artifacts are downloaded to the current working directory. This is usually fine for per-user native 
+installers, but if you distribute your application via a system-wide native installer, or just the launcher 
+jar, you might want to specify where the downloaded artifacts land. See the 
+[cache dir documentation] for more information.
+
+[cache dir documentation]: https://github.com/edvin/fxlauncher/wiki/Optional-Cache-Directory
 
 ## Installation location
 
-It's worth noting that the two package alternatives for Windows, (EXE and MSI) have different install location defaults.
-While EXE will default to %APPDATALOCAL%, the MSI installer will default to %ProgramFiles%. If you use the MSI installer you
-might therefore need to specify the cache dir parameter as `cacheDir 'USERLIB/MyApp'` to make sure that the launcher has
-write access to download the artifacts for your application.
+It's worth noting that the two package alternatives for Windows, (EXE and MSI) have different default install locations.
+While EXE will default to [`%LocalAppData%`], the MSI installer will default to `%ProgramFiles%`.  To write to 
+`%ProgramFiles%` one definitely does need admin privileges—that poses a problem for FXLauncher which, by default, 
+downloads updates to where it was installed. 
+
+If you use the MSI installer you will therefore need to tell FXLauncher to cache artifacts somewhere it is allowed
+to put them. For an OS-independent answer to this problem, look no further than the 
+[two magical strings][cache dir documentation], `USERLIB` and `ALLUSERS`. 
+
+
+[`%LocalAppData%`]: https://www.howtogeek.com/318177/what-is-the-appdata-folder-in-windows/
 
 Read more about Java Packager in the official documentation:
 
@@ -166,7 +182,7 @@ after the update process has completed.
 
 ## A slimmer alternative
 
-It is also possible to embed the launchar jar in a native installer system like Advanced Installer - same approach as above, 
+Instead of using javapackager to create an installer, you can embed the fxlauncher jar in a native installer system like Advanced Installer—same approach as above, 
 but without using javapackager. With this approach, you can choose whether to include a JRE or have the installer software preinstall it.
 Again, you are only distributing the launcher with the native installer, the rest is pulled down on demand.
 
